@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "s5_gw_010"
+version = "0.1.0"
+description = "Member Space Platform · pre-invocation masking: placeholders and request-level encrypted mapping table"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn>=0.27",
+  "sqlalchemy>=2.0",
+  "alembic>=1.13",
+  "psycopg[binary]>=3.1",
+  "redis>=5.0",
+  "cryptography>=42.0",
+  "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.0",
+  "fakeredis>=2.23",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["error::DeprecationWarning:app.*"]
+
+[tool.setuptools]
+packages = ["app", "app.api", "app.masking"]
+
