@@ -63,8 +63,8 @@ POST /api/v1/gw/chat/completions
 ```bash
 uv venv .venv --python 3.13
 uv pip install --python .venv/Scripts/python.exe -e ".[test]"
-.venv/Scripts/python.exe -m pytest -q            # 42 passed, 1 skipped（fakeredis + SQLite）
-# 接真实服务：见 README 的 GW_TEST_REDIS_URL / GW_TEST_DATABASE_URL，43 passed
+.venv/Scripts/python.exe -m pytest -q            # 43 passed, 1 skipped（fakeredis + SQLite）
+# 接真实服务：见 README 的 GW_TEST_REDIS_URL / GW_TEST_DATABASE_URL，44 passed
 .venv/Scripts/python.exe -m alembic upgrade head # 需要 GW_DATABASE_URL
 .venv/Scripts/python.exe -m examples.gateway_demo  # 端到端演示，RESULT: PASS
 ```
