@@ -15,7 +15,7 @@ SQLAlchemy 2.1.9，Alembic 1.18.x，cryptography，redis-py 8.2.0，pytest 9.2.0
 | 2. Redis 中 `gw:mask:{request_id}` 的值无法直接读出原值，用密钥解密后可还原（单元测试） | `.venv\Scripts\python.exe -m pytest -o addopts= -q tests/test_encrypted_store.py::test_criterion_2_redis_value_is_not_readable_but_decrypts` | 存储值中不含手机号/证件号/邮箱与映射表结构；用 `GW_MASK_KEY` 解密后占位符与原值一致 | `1 passed in 0.04s` |
 | 3. 发往 mock 厂商的请求体中搜索不到任何原始虚构手机号、证件号、邮箱（集成测试断言） | `.venv\Scripts\python.exe -m pytest -o addopts= -q tests/test_vendor_payload.py::test_criterion_3_vendor_request_contains_no_originals` | 厂商请求原始字节不含任何原值，含统一占位符，映射在调用后删除 | `1 passed in 0.03s` |
 | 4. 测试运行产生的应用日志中不含原值与映射表内容（测试断言） | `.venv\Scripts\python.exe -m pytest -o addopts= -q tests/test_logs_no_pii.py::test_criterion_4_full_flow_logs_no_originals_or_mapping` | 捕获 DEBUG 级全部日志记录，不含 4 个虚构原值与映射表结构；审计行只含元数据 | `1 passed in 0.18s` |
-| 交付物齐备（脱敏服务、加密存取、开关与审计、单元测试、占位符规范 README） | `.venv\Scripts\python.exe -m pytest -o addopts= -q` | 全部用例通过 | `42 passed, 1 skipped in 3.8s`（默认 fakeredis + SQLite；skip 是需真实数据库的迁移往返） |
+| 交付物齐备（脱敏服务、加密存取、开关与审计、单元测试、占位符规范 README） | `.venv\Scripts\python.exe -m pytest -o addopts= -q` | 全部用例通过 | `43 passed, 1 skipped in 2.6s`（默认 fakeredis + SQLite；skip 是需真实数据库的迁移往返） |
 
 同一条命令接真实服务复跑（验收证据）：
 
@@ -23,7 +23,7 @@ SQLAlchemy 2.1.9，Alembic 1.18.x，cryptography，redis-py 8.2.0，pytest 9.2.0
 set GW_TEST_REDIS_URL=redis://127.0.0.1:16380/0
 set GW_TEST_DATABASE_URL=postgresql+psycopg://gw:gw@127.0.0.1:16381/gw
 .venv\Scripts\python.exe -m pytest -o addopts= -q
-# 43 passed in 3.84s   （无 skip：迁移往返在真实 PostgreSQL 16 上跑）
+# 44 passed in 3.64s   （无 skip：迁移往返在真实 PostgreSQL 16 上跑）
 ```
 
 ## 二、迁移往返（真实 PostgreSQL 16）
@@ -116,6 +116,7 @@ RESULT: PASS
 | 开关默认开启、非管理员 403 且不写审计、管理员关闭写审计 | `test_mask_enabled_defaults_to_true`、`test_feature_flag_change_requires_admin`、`test_admin_can_disable_masking_and_the_change_is_audited` |
 | 关闭开关后走显式旁路（原文、`masked=false`、命中数 0） | `test_chat_completions_bypasses_when_flag_disabled`、`test_bypass_sends_original_text_when_masking_is_disabled` |
 | system 说明追加/新建、分片文本处理 | `test_system_note_is_appended_to_existing_system_message`、`test_system_message_is_created_when_absent`、`test_text_parts_are_masked_and_other_parts_preserved` |
+| 工作站代理环境（`NO_PROXY` 含 `[::1]`）不影响厂商客户端构建，脱敏请求不会被代理改道 | `test_vendor_client_ignores_a_hostile_proxy_environment` |
 
 ## 五、反例（边界）
 
@@ -127,7 +128,31 @@ RESULT: PASS
 | 审计明细里粘了手机号 | `UnsafeAuditDetail`，不写行 | `test_audit_detail_with_personal_data_is_refused` 通过 |
 | 缺 `X-Org-Id` 调网关接口 | 400 | `test_chat_completions_requires_org_header` 通过 |
 
-## 六、本环境未覆盖的部分（如实说明）
+## 六、真实启动冒烟（uvicorn + 真实 Redis/PostgreSQL）
+
+按 README 的启动命令起服务（审计表已由 `alembic upgrade head` 建好），实测四类请求：
+
+```bash
+set GW_MASK_KEY=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+set GW_REDIS_URL=redis://127.0.0.1:16380/0
+set GW_DATABASE_URL=postgresql+psycopg://gw:gw@127.0.0.1:16381/gw
+.venv\Scripts\python.exe -m uvicorn app.api.main:create_app --factory --port 18080
+```
+
+```text
+GET  /healthz                              -> 200 {"status":"ok"}
+POST /api/v1/gw/mask                       -> 200
+{"request_id":"b8eb6437baa848dbbb16201bf0bcf809","masked_messages":[{"role":"system","content":"你是助理。\n\n文中 [[类型_序号]] 为占位符，请原样保留，不要改写或推测"},{"role":"user","content":"联系 [[PHONE_1]] 或 [[EMAIL_1]]"}],"masked_entity_count":2,"distinct_values":2,"placeholders":[{"placeholder":"[[EMAIL_1]]","type":"EMAIL"},{"placeholder":"[[PHONE_1]]","type":"PHONE"}]}
+GET  /api/v1/gw/features/mask_enabled      -> 200 {"flag_key":"mask_enabled","enabled":true,"explicit":false,...}
+PATCH /api/v1/gw/features/mask_enabled     -> 200（gateway_admin）
+{"flag_key":"mask_enabled","enabled":false,"explicit":true,"updated_at":"2026-11-24T09:23:51.612956+00:00","updated_by":"gateway-admin@example.invalid","reason":"smoke test drill","audit_id":"5aa2eeb1-6e56-4d49-bdce-a02ae3d18fe3","audit_action":"gw.feature_flag.updated"}
+```
+
+冒烟过程中发现并修复一处部署级问题：工作站 `NO_PROXY` 含 `[::1]` 时，httpx 解析环境代理会抛
+`InvalidURL`，导致服务起不来。厂商客户端改为 `trust_env=False`（厂商流量直达配置的地址，不被工作站代理改道），
+并补了回归测试 `test_vendor_client_ignores_a_hostile_proxy_environment`。
+
+## 七、本环境未覆盖的部分（如实说明）
 
 - 真实模型厂商未接入：验收条款只要求 mock 厂商，`VendorClient` 为 OpenAI 兼容 `/chat/completions`，
   厂商地址与密钥由环境变量注入；联调时替换 `GW_VENDOR_BASE_URL` 即可，不需要改脱敏代码。

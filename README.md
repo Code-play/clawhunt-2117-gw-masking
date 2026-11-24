@@ -158,6 +158,7 @@ curl -X PATCH http://127.0.0.1:8000/api/v1/gw/features/mask_enabled \
 - 映射表在 Redis 中始终是密文（AES-256-GCM，随机 nonce，AAD 绑定 `request_id`）；还原成功后立即删除。
 - 映射表、原值、消息正文都不进日志；`app/audit.py` 会拒绝包含手机号/证件号/邮箱的审计明细。
 - 密钥缺失、解密失败、Redis 不可用时一律失败关闭：宁可不调用厂商，也不把原文发出去。
+- 厂商调用不读取工作站代理环境（`trust_env=False`），脱敏后的请求直达 `GW_VENDOR_BASE_URL`；生产若需走代理，请在网关侧显式配置。
 - 交付物全部使用虚构数据，不含客户名称。
 
 ## 已知边界

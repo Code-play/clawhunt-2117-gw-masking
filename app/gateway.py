@@ -69,11 +69,16 @@ class VendorClient:
         api_key: str | None = None,
     ) -> None:
         self._model = model
+        # trust_env=False: vendor traffic goes directly to the configured base URL.
+        # Besides being the least surprising production behaviour, it keeps a
+        # workstation proxy environment (HTTP_PROXY/NO_PROXY) from rerouting
+        # masked model traffic through an unintended hop.
         self._client = httpx.Client(
             base_url=base_url.rstrip("/"),
             timeout=timeout_seconds,
             transport=transport,
             headers={"content-type": "application/json"},
+            trust_env=False,
         )
         self._api_key = api_key
 

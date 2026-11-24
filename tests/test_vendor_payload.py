@@ -75,6 +75,20 @@ def test_mapping_is_discarded_when_the_vendor_fails(masking: MaskingService, red
     assert redis_client.get(mapping_key("req-vendor-fail")) is None
 
 
+def test_vendor_client_ignores_a_hostile_proxy_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A malformed NO_PROXY entry must not break gateway start-up or vendor calls."""
+
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:7890")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:7890")
+    monkeypatch.setenv("NO_PROXY", "localhost,[::1]")
+
+    client = VendorClient("http://vendor.test/v1", transport=httpx.MockTransport(lambda request: httpx.Response(200, json={})))
+    try:
+        assert client is not None
+    finally:
+        client.close()
+
+
 def test_bypass_sends_original_text_when_masking_is_disabled(
     gateway: ChatGateway, vendor: CapturingVendor, redis_client
 ) -> None:
